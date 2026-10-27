@@ -19,6 +19,8 @@ and our staleness — because a vendor-patched CVE lane alone can read as
   kit exploit  aio TARGET [cells...]    php2shell AIO cells
   kit exploit  wp BASE --path P         consumer-app census
   kit bench    serve [mode]             local php -S harness (setarch -R)
+  kit deploy   --check|--docker|--scp   venue docroot trio: presence / push
+  kit selftest [--fast]                 the kit proves itself on this box
   kit triage   --php-bin B | --url U    full ladder -> one-page report
   kit targets                           regime knowledge + your lab map (targets/*.md)
   kit versions                          known php builds on this box
@@ -34,6 +36,8 @@ CVE     = os.path.join(ROOT, 'prove',   'cve_shape.py')
 UAF     = os.path.join(ROOT, 'exploit', 'uaf.py')
 PUB     = os.path.join(ROOT, 'exploit', 'pubstate.py')
 AIO     = os.path.join(ROOT, 'exploit', 'php2shell.py')
+SELF    = os.path.join(ROOT, 'selftest', 'selftest.py')
+DEPLOY  = os.path.join(ROOT, 'deploy',   'deploy.py')
 SERVE   = os.path.join(ROOT, 'bench',   'serve.sh')
 PROJ    = os.environ.get('PHP2SHELL_PROJ') or os.path.expanduser('~/.local/share/php-session-uaf')
 
@@ -183,6 +187,15 @@ def cmd_bench(rest):
     print('  ' + step(1, 1, 'mode=%s · %s' % (mode, os.path.relpath(SERVE, ROOT))))
     execv(SERVE, [mode], env_extra=env)
 
+def cmd_deploy(rest):
+    print(rule('deploy · venue trio — php2shell_detect.php + app.php + cve2_app.php'))
+    execv(DEPLOY, rest)
+
+def cmd_selftest(rest):
+    print(rule('selftest · local regression harness — no venue, no network'))
+    print('  ' + paint(DIM, '  (dispatcher smokes · tier help · CLI matrix · 618 arms · portability)'))
+    execv(SELF, rest)
+
 def cmd_triage(rest):
     ours, _ = split_opts(rest, known_flags_with_value=('--url', '--app'))
     b, u = ours.get('php-bin'), ours.get('url')
@@ -220,7 +233,17 @@ def cmd_triage(rest):
     print('  ' + paint(DIM, 'and a CLOSED vendor pair ≠ safe: the staleness lane rides the same sweep'))
     sys.exit(max(rc for _, rc in results) if results else 3)
 
-def cmd_targets(_):
+def cmd_targets(args):
+    if args and args[0] == '--json':
+        import json
+        man = {}
+        for f in sorted(os.listdir(os.path.join(ROOT, 'targets'))):
+            if f.endswith('.md'):
+                p = os.path.join(ROOT, 'targets', f)
+                man[f] = {'bytes': os.path.getsize(p),
+                          'lines': sum(1 for _ in open(p))}
+        print(json.dumps({'targets_notes': man, 'lab_is_example': True}, indent=2))
+        return
     for f in sorted(os.listdir(os.path.join(ROOT, 'targets'))):
         if f.endswith('.md'):
             print(open(os.path.join(ROOT, 'targets', f)).read().rstrip() + '\n')
@@ -269,6 +292,8 @@ def help_text():
         ('kit exploit  pubstate  host[:port]', 'stock-config lever shell (patched venues)'),
         ('kit exploit  aio|--wp ...', 'AIO cells · consumer-app census'),
         ('kit bench    serve [mode]', 'local setarch -R php -S harness'),
+        ('kit deploy   --check H:P | --docker C | --scp u@h:/p', 'venue docroot trio: presence / push'),
+        ('kit selftest [--fast]', "the kit proves itself on this box (no network)"),
         ('kit triage   --php-bin B | --url U', 'full ladder → colored summary'),
         ('kit targets | kit versions', 'regime + lab notes · php builds found on this box'),
     ]:
@@ -293,6 +318,7 @@ def main():
         return _tier_help(cmd, rest)
     {'detect': cmd_detect, 'prove': cmd_prove, 'exploit': cmd_exploit,
      'bench': cmd_bench, 'triage': cmd_triage, 'targets': cmd_targets,
+     'deploy': cmd_deploy, 'selftest': cmd_selftest,
      'versions': cmd_versions}.get(cmd, lambda r: die('unknown command: %s' % cmd + '\n'))(rest)
 
 def _tier_help(cmd, _):
