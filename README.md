@@ -115,6 +115,7 @@ kit targets [--json] | kit versions          venue notes (author's map, when pre
 | 8.3.6 venue | Apache prefork | **UNPATCHED** | chain LIKELY | **2** |
 | 8.3.36, **zero ini** | Apache prefork | PATCHED | pubstate **ARMED** — dial-back `www-data` | 0 |
 | 8.5.12, stock ini | mod_php (docker) | PATCHED | chain LIKELY — dial-back `www-data` | 0 |
+| 8.5.12, stock ini | mod_php (source Apache, .16) | PATCHED | pubstate **3/3** — dial-back `daemon` | 0 |
 | 8.5.12 | FPM + nginx | PATCHED | pubstate **3/3** — dial-back `www-data` | 0 |
 | 8.3.36, proven ini | php -S, `setarch -R` | PATCHED | spray **5/5** byte-identical, `shell: YES` | 0 |
 | **8.6.0RC4** (8.6 era) | php -S, `setarch -R` | PATCHED (markers 10× in source) | spray **5/5** byte-identical `205,335/517,337`, `shell: YES` | 0 |
