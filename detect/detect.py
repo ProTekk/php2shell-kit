@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """detect.py — benign client-testing runner for php2shell_detect.php.
 
-One sweep, three lanes: a URL check runs the vendor CVE pair (lineage +
+One sweep, four lanes: a URL check runs the vendor CVE pair (lineage +
 optional --probe arm), OUR staleness (the frozen-counter signature via
-app.php deployed beside the detector), and the pubstate lever tier — so a
-patched CVE lane never reads as "nothing is exploitable". The staleness
+app.php deployed beside the detector), the pubstate lever tier — so a
+patched CVE lane never reads as "nothing is exploitable" — and the
+advisory CVE-2026-115560 serializer gate (config half; never moves the
+exit code). The staleness
 lane reports our lever, which the vendor patch never touched; when the
 CVE pair is closed but staleness is armed, the report says PATCHED ≠ SAFE.
 Default output is HUMAN: a one-line verdict plus lane lines, with all
@@ -531,6 +533,16 @@ def main():
 
     print('')
     print('%s %s' % (c('◆ PHP2Shell · CVE-2026-109618/109619 + our staleness', BCYA), c(target, BOLD)))
+    # config gate leads the box: it's the first thing a client's vendor PSA
+    # will toggle (upload_progress.enabled=0 is PHP's own published mitigation
+    # for the whole feature) — state it before any verdict can be misread.
+    if fields.get('verdict') == 'NO-TRIGGER':
+        gate_txt = 'absent (PHP < 5.4)'
+    elif up_off:
+        gate_txt = c('DISABLED', GRN) + ' — every lever in this kit is off by config'
+    else:
+        gate_txt = c('ENABLED', YEL) + ' — levers live'
+    print('%s %s' % (lab('  gate    '), 'session.upload_progress ' + gate_txt))
     print('%s %s' % (lab('  VERDICT  '), c(vword, vw_col) + ' — ' + vtail))
     cve_tag = {'VULN': tag('UNPATCHED', RED), 'VULN-EOL': tag('UNPATCHED · EOL', RED),
                'FIXED': tag('PATCHED', GRN), 'NO-TRIGGER': tag('N/A', GRN),
@@ -559,6 +571,22 @@ def main():
     if chain:
         ct, cc = hum_chain[chain]
         print('%s %s' % (lab('  Our chain'), ct + ' ' + cc))
+    # lane D: CVE-2026-115560 serializer-swap gate (advisory lane — it can
+    # never move the exit code; it informs the same one-pager so "PATCHED"
+    # clients know the third advisory's door state too).
+    ser = (fields.get('ser') or '').strip()
+    if ser == '':
+        print('%s %s' % (lab('  115560  '), c('[ ? ] detector predates the ser= field — redeploy php2shell_detect.php to read this gate', DIM)))
+        ml('CVE115560|unknown|detector output has no ser= field (redeploy)')
+    elif ser == 'php':
+        print('%s %s' % (lab('  115560  '), tag('OFF', GRN) + ' serialize_handler=php — advisory\'s config precondition not met'))
+        ml('CVE115560|off|ser=php')
+    elif ser in ('php_binary', 'php_serialize'):
+        print('%s %s' % (lab('  115560  '), tag('ARMED*', YEL) + ' serialize_handler=%s — config half ON; the runtime ini_set swap lives in app code (CHECK-APP-CODE)' % ser))
+        ml('CVE115560|armed-config-half|ser=%s|app-code=check-grep-ini_set' % ser)
+    else:
+        print('%s %s' % (lab('  115560  '), tag('CHECK', YEL) + ' serialize_handler=%s — non-default handler; verify against advisory preconditions' % ser))
+        ml('CVE115560|check|ser=%s' % ser)
     if not cve_bad and (armed or stale_hot):
         print('  ' + c('⚠ PATCHED ≠ SAFE — the vendor CVE pair is closed, but our staleness lever is '
                        'armed here: the verdict is "not the CVE", not "not exploitable"', BYEL))

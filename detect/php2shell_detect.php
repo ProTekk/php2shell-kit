@@ -61,6 +61,7 @@ $out[] = 'PHP2SHELL_DETECT|v=' . PHP_VERSION . '|cve=CVE-2026-109618/109619|vid=
        . '|sapi=' . php_sapi_name()
        . '|osfam=' . $osfam . '|zts=' . $zts
        . '|ini=' . (php_ini_loaded_file() !== null && php_ini_loaded_file() !== '' ? php_ini_loaded_file() : 'none')
+       . '|ser=' . ini_get('session.serialize_handler')
        . '|mem=' . ini_get('memory_limit')
        . '|post=' . ini_get('post_max_size')
        . '|up_en=' . var_export($up_en === '' ? null : $up_en, true)

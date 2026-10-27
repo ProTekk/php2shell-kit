@@ -105,10 +105,11 @@ def need(value, flag):
 # ── commands ────────────────────────────────────────────────────────────────
 
 def cmd_detect(rest):
-    print(rule('detect · one sweep, three lanes — exit code = verdict'))
-    print('  ' + step(1, 3, 'lane A · vendor CVE pair — lineage + config gate (+ --probe for the behavioral arm)'))
-    print('  ' + step(2, 3, 'lane B · OUR staleness — frozen-counter readback via app.php beside the detector (needs --url)'))
-    print('  ' + step(3, 3, 'lane C · pubstate lever — the stock-config door; PATCHED CVE ≠ armed lever'))
+    print(rule('detect · one sweep, four lanes — exit code = verdict'))
+    print('  ' + step(1, 4, 'lane A · vendor CVE pair — lineage + config gate (+ --probe for the behavioral arm)'))
+    print('  ' + step(2, 4, 'lane B · OUR staleness — frozen-counter readback via app.php beside the detector (needs --url)'))
+    print('  ' + step(3, 4, 'lane C · pubstate lever — the stock-config door; PATCHED CVE ≠ armed lever'))
+    print('  ' + step(4, 4, 'lane D · CVE-2026-115560 serializer gate — advisory; rides the detector payload, never moves the exit code'))
     execv(DETECT, rest)
 
 def cmd_prove(rest):
@@ -260,7 +261,7 @@ def help_text():
     t.append(paint(DIM, 'the detect sweep always asks both questions: official CVE pair AND our staleness'))
     t.append('')
     for line, desc in [
-        ('kit detect   --php-bin B | --url U [--probe]', 'one sweep: CVE pair + staleness + lever'),
+        ('kit detect   --php-bin B | --url U [--probe]', 'one sweep: CVE pair + staleness + lever + 115560 gate'),
         ('kit prove    staleness --target ip:port', 'frozen-counter signature on a live venue'),
         ('kit prove    cve618|cve619 [--php-bin B]', "vendor regression-shape arm (local build)"),
         ('kit prove    arm --target ip:port', 'vendor discriminator against a live venue'),
