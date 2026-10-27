@@ -64,7 +64,7 @@ def find_phps():
     for pat in ('/usr/bin/php[0-9.]*', '/usr/local/bin/php[0-9.]*',
                 '/usr/bin/php', '/usr/local/bin/php'):
         cands += glob.glob(pat)
-    proj = os.environ.get('PHP2SHELL_PROJ')
+    proj = os.environ.get('PHP2SHELL_PROJ') or os.path.expanduser('~/.local/share/php-session-uaf')
     if proj:
         cands += sorted(glob.glob(os.path.join(proj, 'php-*/sapi/cli/php')))
     out, seen = [], set()

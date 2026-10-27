@@ -174,6 +174,14 @@ def run_once(kind, spawn_local):
             srv.terminate(); srv.wait()
 
 def main():
+    if MODE in ('-h', '--help'):
+        print("""cve_shape.py — vendor 618/619 regression-shape arms (spins a local php -S bench)
+  modes: stock618 | cve618 | cve619 | patched618 | patched619 | reliability | remote
+  exit: 2 VULN-SIG (silent parse-time bailout) · 0 FIXED-SIG (visible delayed fatal)
+  env:  PHP_BIN (php on PATH) · PHP2SHELL_PROJ (build trees for patched arms)
+        ARM_MB (arm size; 12 stock / 6 vendor) · TARGET=ip:port + RHOST for remote
+  prefer: `kit prove cve618|arm` — the dispatcher sets these and prints steps.""")
+        sys.exit(0)
     mode = MODE
     ok = 0
     if mode == 'reliability':
