@@ -91,8 +91,22 @@ kit targets [--json] | kit versions          venue notes (author's map, when pre
   `system()` *gated by* the observed UAF/staleness signature — PHP
   being vulnerable is necessary, not sufficient; the application must
   actually read the corrupted entry.
+- **Audit settlement (2026-10-27, independent code review, agreed)**:
+  the staleness-chain shell stays corruption-gated; the **pubstate
+  default run is a window-reachability receipt, not a corruption
+  receipt** — its gate (session active + body present) is satisfiable
+  without the alleged corruption event, and the default skips the
+  corruption stage by design. Neither grade touches the underlying
+  condition, which reproduces on untouched builds.
+- **Caller leg, sinkless (2026-10-27)**: session-decode dispatch —
+  `__unserialize` + `__destruct` through `zend_call_function` — fires
+  5/5 on six venues (distro 8.3.6 `php -S` + Apache prefork, patched
+  8.3.36 vendor venue, 8.5.12 mod_php) with an **echo-only app**: no
+  `system`/`exec`/`eval` sink anywhere in its source. Controlled
+  execution *through a forged handler* is still the open rung — store
+  placement, not dispatch, gates the endgame.
 
-## Receipts (this kit's own runs, 2026-10-26)
+## Receipts (this kit's own runs, 2026-10-26 → 27)
 
 | Config | Engine | Vendor pair | Our lever | Exit |
 |---|---|---|---|---|
@@ -103,6 +117,12 @@ kit targets [--json] | kit versions          venue notes (author's map, when pre
 | 8.5.12, stock ini | mod_php (docker) | PATCHED | chain LIKELY — dial-back `www-data` | 0 |
 | 8.5.12 | FPM + nginx | PATCHED | pubstate **3/3** — dial-back `www-data` | 0 |
 | 8.3.36, proven ini | php -S, `setarch -R` | PATCHED | spray **5/5** byte-identical, `shell: YES` | 0 |
+| **8.6.0RC4** (8.6 era) | php -S, `setarch -R` | PATCHED (markers 10× in source) | spray **5/5** byte-identical `205,335/517,337`, `shell: YES` | 0 |
+
+The 8.6.0RC4 row is the era-extender: built from the RC tag the night it
+shipped, vendor fix markers present 10× — and the frozen counter reads
+**byte-identical to the 8.3.x harness numbers** on a machine 1000 km and
+three PHP majors away. The lever now spans 8.3 → 8.6.
 
 Five shells collected on five distinct configs (prefork, prefork-patched,
 FPM, mod_php, php -S), one dial-back identity receipt each, all
