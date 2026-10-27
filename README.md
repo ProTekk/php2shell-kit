@@ -8,7 +8,8 @@ One `python3` dispatcher, zero dependencies, exit code = verdict. From
 "is this box affected?" to "I have a shell on it" in one command.
 
 ```console
-$ ./kit triage --url http://192.0.2.10:18990/
+$ ./kit selftest                                    # the kit proves itself on this box
+$ ./kit triage --url http://192.0.2.10:18990/       # or point it at a target
 ```
 
 ## What this is
@@ -44,13 +45,17 @@ nothing is exploitable:
 
 Adjacent note: **CVE-2026-115560** (serializer-mismatch, advisory-only,
 unpatched) is a *third* bug in the same feature. Same street, different
-house — this kit's staleness lane is not that lane.
+house — this kit's staleness lane is not that lane, but the sweep
+carries its **config gate** anyway: `serialize_handler` swapped away
+from `php` is greppable without an exploit, so every verdict box can
+answer "is this box even armed for 115560?" (`ser=` field; the gate
+never moves the exit code — it's advisory).
 
 ## What it does
 
 ```
 kit triage   --php-bin B | --url U     full ladder -> colored one-page summary
-kit detect   --php-bin B | --url U     one sweep: vendor pair + staleness + lever
+kit detect   --php-bin B | --url U     one sweep: vendor pair + staleness + lever + 115560 gate
 kit prove    staleness --target ip:port      frozen-counter signature, live venue
 kit prove    cve618|cve619 [--php-bin B]     vendor regression-shape arm (local build)
 kit prove    arm --target ip:port            vendor discriminator, live venue (loud: forces an OOM)
@@ -58,11 +63,18 @@ kit exploit  staleness host[:port]           UAF chain -> pty shell over connect
 kit exploit  pubstate  host[:port]           stock-config lever shell (works on patched venues)
 kit exploit  aio|--wp ...                    AIO cells · consumer-app census
 kit bench    serve [mode]                    local setarch -R php -S harness
-kit targets | kit versions                   regime/lab notes · php builds found on this box
+kit deploy   --check H:P | --docker C | --scp u@h:/p   docroot trio: presence / push
+kit selftest [--fast]                        the kit proves itself on this box (no network)
+kit targets [--json] | kit versions          regime/lab notes · php builds found on this box
 ```
 
 - **Exit code IS the verdict**: `0` clean/patched · `2` vulnerable ·
   `3` no-trigger/not-applicable. Scriptable in audit passes.
+- **The kit proves itself**: `kit selftest` runs 16 cells — dispatcher
+  smokes, tier help, the CLI detect matrix against known verdicts on
+  every PHP build it can find, the vendor arms, and a tarball-
+  portability cell (no project tree, foreign cwd) — no network, ~90 s.
+  Run it on a fresh clone before trusting a verdict on a stranger's box.
 - **Detect** works on CLI boxes (`--php-bin`) and live web venues
   (`--url`). A bare `http://host:port/` auto-finds the deployed
   detector. Probe beats lineage: distro backports can lie about
@@ -96,7 +108,12 @@ Five shells collected on five distinct configs (prefork, prefork-patched,
 FPM, mod_php, php -S), one dial-back identity receipt each, all
 first-try. A dedicated reproduction run popped the whole fleet in
 **~2 seconds** and a repeat leg 54 seconds later returned an identical
-banner — reproducible, not a one-shot fluke.
+banner — reproducible, not a one-shot fluke. Every shell banner dials
+back with the `php2shell-revshell-OK` handshake marker (historical name,
+not a version readout — it dials correctly from 8.5.12 too).
+
+`kit selftest` ships green: **16/16 PASS** from the committed tree on
+the author's box, 2026-10-26 — the same command a stranger runs first.
 
 ## Layout
 
