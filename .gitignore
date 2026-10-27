@@ -1,0 +1,9 @@
+# runtime droppings — the kit lands clean
+__pycache__/
+*.pyc
+bench/sessions/
+bench/server.log
+bench/sessions.log
+php2shell-detect-*.log
+*.tar.gz
+*.tgz
