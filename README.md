@@ -12,7 +12,24 @@ $ ./kit selftest                                    # the kit proves itself on t
 $ ./kit triage --url http://192.0.2.10:18990/       # or point it at a target
 ```
 
-## What this is
+## Groom port result (vendor-ordered placement, tested 2026-10-27)
+
+The vendor's ordering trick (file1 fires the free mid-request, 149 groom fields arrive
+after the free, file2's stores arrive after the fields) was ported and run on four
+engines including LiteSpeed's own builds — `lsphp 8.3.36` and `lsphp 8.5.12` (inline-bucket
+era, OpenLiteSpeed 1.9.4), plus 8.3.6 and patched mod_php 8.5.12. Every run returned
+HEALED: the counter advances fully (`bytes == clen`) and no field shows store damage
+(`WINDOWS=0`), 12/12 runs. Explanation: between the core's `track_init()` free and its
+same-function re-decode there is no allocation window any request-level data can enter —
+PHP's re-decode pops the freed block itself. The vendor's published field-landing is
+therefore lab-state-dependent (busy/concurrent heap), not a property of the published
+request ordering alone. A deterministic slot-collision sweep (28 key names) found no
+session key owning the store's fixed slot. This leaves attacker-controlled placement —
+and with it the forged-handler hijack — open for anyone, us included; what IS demonstrated
+on every venue is that the dispatch callee identity (`__unserialize`) comes from the
+attacker's payload.
+
+## What this kit is
 
 PHP's upload-progress feature (`session.upload_progress.enabled=1` — the
 default) writes into `$_SESSION` before your application code runs. In
