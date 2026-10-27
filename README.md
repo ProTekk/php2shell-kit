@@ -100,7 +100,7 @@ kit targets [--json] | kit versions          venue notes (author's map, when pre
   condition, which reproduces on untouched builds.
 - **Caller leg, sinkless (2026-10-27)**: session-decode dispatch —
   `__unserialize` + `__destruct` through `zend_call_function` — fires
-  5/5 on six venues (distro 8.3.6 `php -S` + Apache prefork, patched
+  5/5 on five venues (distro 8.3.6 `php -S` + Apache prefork, patched
   8.3.36 vendor venue, 8.5.12 mod_php) with an **echo-only app**: no
   `system`/`exec`/`eval` sink anywhere in its source. Controlled
   execution *through a forged handler* is still the open rung — store
