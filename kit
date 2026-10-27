@@ -234,6 +234,17 @@ def cmd_triage(rest):
     sys.exit(max(rc for _, rc in results) if results else 3)
 
 def cmd_targets(args):
+    notes = os.path.join(ROOT, 'targets')
+    if not os.path.isdir(notes):
+        # venue notes are the author's lab map, not a dependency —
+        # the public tree ships without them; the kit never reads them
+        msg = ('venue notes not in this tree (the author keeps them beside the '
+               'repo) — the kit itself needs no targets/ directory')
+        if args and args[0] == '--json':
+            import json; print(json.dumps({'targets_notes': None, 'note': msg}))
+        else:
+            print(paint(DIM, msg))
+        return
     if args and args[0] == '--json':
         import json
         man = {}

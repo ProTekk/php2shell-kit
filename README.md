@@ -65,7 +65,7 @@ kit exploit  aio|--wp ...                    AIO cells · consumer-app census
 kit bench    serve [mode]                    local setarch -R php -S harness
 kit deploy   --check H:P | --docker C | --scp u@h:/p   docroot trio: presence / push
 kit selftest [--fast]                        the kit proves itself on this box (no network)
-kit targets [--json] | kit versions          regime/lab notes · php builds found on this box
+kit targets [--json] | kit versions          venue notes (author's map, when present) · php builds found on this box
 ```
 
 - **Exit code IS the verdict**: `0` clean/patched · `2` vulnerable ·
@@ -123,8 +123,6 @@ detect/              single-file checker (PHP 5.4+, exit-code contract) + runner
 prove/               staleness spray · vendor regression-shape arms
 exploit/             staleness chain · pubstate lever · app census
 bench/               setarch -R php -S harness + docroot apps + arm docroot
-targets/venues.md    universal SAPI/config regime knowledge
-targets/lab.md       the author's venue map — an example, not a dependency
 ```
 
 ## Portability
