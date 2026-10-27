@@ -23,7 +23,7 @@ error_reporting(E_ALL);
 @ini_set('display_errors', '1');
 
 // ---- fix-floor table (upstream lineage) -------------------------------
-$floors = array('8.2' => '8.2.35', '8.3' => '8.3.36', '8.4' => '8.4.27', '8.5' => '8.5.12');
+$floors = array('8.2' => '8.2.35', '8.3' => '8.3.36', '8.4' => '8.4.27', '8.5' => '8.5.12', '8.6' => '8.6.0RC4'); // 8.6: in_rfc1867_update markers verified present in RC4 source (10/27); version_compare orders betaN < RC4 < RC5 < GA, so pre-RC4 8.6 tags read below the floor and the probe lane overrides lineage anyway
 $mm = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
 $floor = '';
 if (version_compare(PHP_VERSION, '5.4.0', '<')) {
