@@ -34,10 +34,20 @@ Busy-heap sweep (2026-10-28 night): planted 5-key arrays (bin-stuffed to 20)
 — distro zend-MM prefork, unpatched 8.5.11 ASAN with `USE_ZEND_ALLOC=0`
 (vendor-lab allocator semantics), 8.3-era twin — **0/120 landed**. The vendor's
 busy-heap `WINDOWS>0` does not reproduce under request-level placement even
-when zend-MM is swapped for ASAN-intercepted malloc. What remains open:
-same-process concurrency (threaded SAPI — prefork heaps never share) and
-allocator-adjacency levers (request-header shape / chunk coalescing). Venue
-lesson free with it: on stock-ini mod_php, ANY echo during `session_start()`
+when zend-MM is swapped for ASAN-intercepted malloc. Both remaining doors
+closed the same night: the threaded door died with the mechanism (ZTS gives
+each thread a PRIVATE zend MM heap — no SAPI shares one PHP heap across
+requests; ZTS+mpm_event venue under churn: 0/60), and header-shape adjacency
+count x byte-size on R1/R2: 0/92. The authoring door closed structurally:
+raw-LF progress keys author session-file LINES (kernel-observed) but author
+KEYS only — the engine's serialized entry always trails the first pipe, and
+pipes inside attacker key bytes are rejected at encode, so serialized objects
+are unauthorable via this channel; stock `cleanup=1` keeps the file empty at
+rest, so authored lines never reach a next request, and 8.5.11 decode failure
+is silent. Net: placement and authoring are request-level-closed on stock
+config — the shell that pops is app-gated (the vendor's position), and it
+pops reliably. One venue lesson, free of charge: on stock-ini mod_php, ANY
+echo during `session_start()`
 decode (e.g. from `__unserialize`) trips the cache limiter and aborts the
 NEXT request's session start (`WSTARTED=NONE`) — buffer pre-header echoes.
 
