@@ -251,6 +251,30 @@ any venue, with the kit's take on each:
   alike return silent 200s). A shell there needs a *manufactured*
   consumer and a per-boot text base for PIE ASLR — that discovery is
   the missing lever, not placement luck.
+- **Update-count oracle and the buffering-proxy verdict (live,
+  2026-10-28 night).** With an invalid (pipe) progress key, every
+  session *write attempt* prints its own warning — so the warning count
+  in a response body counts the request's upload-progress updates.
+  Measured live: a burst body and a 5.2s-paced body produce the SAME
+  two-write pattern (FILE_START + RSHUTDOWN) and zero `min_freq`
+  writes. The front Worker buffers the whole body and hands the origin
+  a datacenter-speed delivery, so the origin's parse window never
+  exceeds a second — and the public chain's mid-upload free (second
+  update → `track_init` dtor of the prior decoded tree) is
+  **structurally inoperable through any body-buffering proxy**, at any
+  placement, any spray, any address. Client-RST abort is no escape
+  either: on 8.5.11 the rfc1867 END branch runs
+  `php_rshutdown_session_globals()` itself, so aborted requests still
+  clean up (the 8.3-era abandon-freeze arm is fixed; verified on the
+  ASAN mod_php twin — RST after paced mid-upload writes leaves a
+  0-byte file). And in-envelope amplification bombs (68K part headers,
+  999×64-deep nested names, both under an 8M declared CL) are digested
+  without strain — no cgroup kill. Net: on a stock-config,
+  buffering-fronted, `memory_limit=-1`, `cleanup=1` target, every
+  producer arm of the public 109618/109619 chain is measurably dead
+  from outside. A working exploit there needs a different primitive
+  (a boot-transition window, a leak channel, or a front-side bypass
+  with side effects) — or the defender's own observability.
 
 CTF-local, for the record: the live box's "loud era" fatals were a
 boot-transition effect (integer-overflow fatal numbers were
