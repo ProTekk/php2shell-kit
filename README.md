@@ -221,6 +221,36 @@ any venue, with the kit's take on each:
   The rules are live-evolving (the same shape passed the same wall the night
   before) — re-verify the un-padded control shot on any test day before
   claiming a bypass. Applies to any cloud-fronted target.
+- **Delivery envelope and transport laws (live, 2026-10-28 evening).**
+  A front Worker imposed a ~10 MB body budget (chunked included — a
+  Worker limit, not the PHP `post_max_size` gate; 12.2 MB chunked and
+  12.5 MB CL bodies both 413 with a 48-byte JSON, no origin hit). With
+  a declared Content-Length the origin's `post_max_size` (8M default)
+  gates the whole POST — keep exploit bodies under it.
+  `upload_max_filesize` (2M default) is a trap with an inversion: file
+  parts **over** 2M abort cleanly before any tmp spool and the venue
+  answers fine, while parts in the ~0.3–1.9 MB range spool fully and
+  *stall mod_php mid-parse* — no response, no error, worker never
+  returns (observed on the live container and both local prefork
+  venues; the same-shaped death, one venue at a time). Transport shape
+  decides survival: raw HTTP/1.1 **burst** bodies with file parts
+  ≥300 KB die at origin timeout, the same bytes **dripped** in 64 KB
+  slices over ≥10 s return 200 — and the drip is not just survival, it
+  is the only thing that paces the origin: `min_freq` upload-progress
+  windows only elapse when bytes arrive over time, so behind a proxy
+  the attacker's own write cadence arms the machinery. HTTP/2 (curl
+  ALPN) bursts survive fine. Same body bytes always return the same
+  front-end attempt UUID — payloads are content-addressed at the edge,
+  so retries cost nothing in bookkeeping.
+- **The public chain's consumer is SAPI-shaped.** The circulating
+  109619 bodies lean on FPM/LiteSpeed semantics (mid-stream `min_freq`
+  frees, next-request decode on a persistent worker). On mod_php behind
+  a buffering proxy, with an empty app whose session file is
+  `cleanup=1`-empty at rest, the forged `zend_call_function` dispatch
+  never fires in lab or live (plausible and garbage call addresses
+  alike return silent 200s). A shell there needs a *manufactured*
+  consumer and a per-boot text base for PIE ASLR — that discovery is
+  the missing lever, not placement luck.
 
 CTF-local, for the record: the live box's "loud era" fatals were a
 boot-transition effect (integer-overflow fatal numbers were
