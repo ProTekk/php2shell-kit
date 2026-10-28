@@ -153,6 +153,55 @@ not a version readout — it dials correctly from 8.5.12 too).
 `kit selftest` ships green: **16/16 PASS** from the committed tree on
 the author's box, 2026-10-26 — the same command a stranger runs first.
 
+## CTF field notes — Cloudflare php-rce (night 2026-10-27 → 28)
+
+The night was spent on a live CTF box and its faithful ASAN twins
+(8.5.11 on `php -S` and prefork mod_php, empty docroot) — the same
+`upload_progress` street this kit patrols. The laws that generalize to
+any venue, with the kit's take on each:
+
+- **SID provenance (source + wire).** The upload-progress SID comes
+  from the multipart body field named `PHPSESSID` (works without any
+  cookie) or the `Cookie` header — cookie takes precedence. URL query
+  is never scanned for it (`use_only_cookies` is compiled in) and no
+  SID means the whole session cycle is skipped. The kit's chain probe
+  already rides the cookie; a body-field plant is the fallback for
+  cookie-less venues.
+- **First-seen-key law.** One progress entry per request, keyed by the
+  *first* progress-field value. Multi-field POSTs don't fan out.
+- **Write-reject oracle.** A pipe byte in the progress value lands
+  byte-exact into the session-file key, breaks `PS_DELIMITER`
+  serialization at write, and the origin prints "Failed to write
+  session data. Data contains invalid key" in the response body
+  (~176 bytes on empty-docroot apps) — deterministic, self-inflicted,
+  needs no persistence and no app code. Display-errors-gated.
+- **Double-write law (stock `cleanup=1`).** RSHUTDOWN writes the
+  session data, cleanup deletes the progress entry, then the progress
+  writer flushes `''` again — the session file is *constant empty at
+  rest*. No readback/persistence chain can fire on a stock box; the
+  channels out are parse-window warnings, the Set-Cookie machinery
+  bit, latency, and crashes. This corroborates the kit's `cleanup=1`
+  LIKELY tier and why the pubstate lever never leans on persistence.
+- **Armed ≠ vulnerable; unpatched ≠ armed.** The live box ran
+  compile-default ini (no php.ini): `memory_limit=-1`, so the vendor
+  OOM producers can never arm — and the ASAN twin on *unpatched*
+  8.5.11 produced **zero reports** replaying the full traffic
+  vocabulary (first such ASAN receipt on record; vendor audit notes
+  0/29 repos ever posted one). A silent response on stock config
+  proves nothing about patch state in either direction — the kit's
+  probe-beats-lineage stance holds.
+- **WAF multipart window.** Cloudflare's multipart inspection is a
+  ~1 MB positional window: pad the progress field past it and the
+  origin sees what the WAF never did. Relevant to any cloud-fronted
+  target.
+
+CTF-local, for the record: the live box's "loud era" fatals were a
+boot-transition effect (integer-overflow fatal numbers were
+uninitialized-heap garbage, not body bytes), and the app was an
+empty `index.php` — the machinery armed even there, which is this
+kit's core premise (the feature writes before app code runs)
+demonstrated on a stranger's production box.
+
 ## Layout
 
 ```
