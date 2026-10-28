@@ -29,6 +29,18 @@ and with it the forged-handler hijack — open for anyone, us included; what IS 
 on every venue is that the dispatch callee identity (`__unserialize`) comes from the
 attacker's payload.
 
+Busy-heap sweep (2026-10-28 night): planted 5-key arrays (bin-stuffed to 20)
++ 256B string carriers + 512B int-slot arrays, 8 trials x 3 allocator regimes
+— distro zend-MM prefork, unpatched 8.5.11 ASAN with `USE_ZEND_ALLOC=0`
+(vendor-lab allocator semantics), 8.3-era twin — **0/120 landed**. The vendor's
+busy-heap `WINDOWS>0` does not reproduce under request-level placement even
+when zend-MM is swapped for ASAN-intercepted malloc. What remains open:
+same-process concurrency (threaded SAPI — prefork heaps never share) and
+allocator-adjacency levers (request-header shape / chunk coalescing). Venue
+lesson free with it: on stock-ini mod_php, ANY echo during `session_start()`
+decode (e.g. from `__unserialize`) trips the cache limiter and aborts the
+NEXT request's session start (`WSTARTED=NONE`) — buffer pre-header echoes.
+
 ## What this kit is
 
 PHP's upload-progress feature (`session.upload_progress.enabled=1` — the
