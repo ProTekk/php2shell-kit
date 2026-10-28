@@ -212,10 +212,15 @@ any venue, with the kit's take on each:
   0/29 repos ever posted one). A silent response on stock config
   proves nothing about patch state in either direction — the kit's
   probe-beats-lineage stance holds.
-- **WAF multipart window.** Cloudflare's multipart inspection is a
-  ~1 MB positional window: pad the progress field past it and the
-  origin sees what the WAF never did. Relevant to any cloud-fronted
-  target.
+- **WAF multipart window (proven on the live wall, 2026-10-28).** Cloudflare's
+  PHP2Shell rules inspect a positional ~1 MB window: a bare
+  `PHP_SESSION_UPLOAD_PROGRESS` field inside the window 403s on the NAME
+  alone (value-independent — clean and pipe values alike), while the identical
+  request with a 1.4 MB filler field ahead of it passes and the origin answers
+  with the write-reject oracle in the body. So: pad first, then progress.
+  The rules are live-evolving (the same shape passed the same wall the night
+  before) — re-verify the un-padded control shot on any test day before
+  claiming a bypass. Applies to any cloud-fronted target.
 
 CTF-local, for the record: the live box's "loud era" fatals were a
 boot-transition effect (integer-overflow fatal numbers were
